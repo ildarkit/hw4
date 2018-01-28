@@ -265,8 +265,8 @@ class BaseStreamHandler(object):
             conn, addr = self.socket.accept()
         except TypeError:
             return None
-        except socket.error as why:
-            if why.args[0] in (EWOULDBLOCK, ECONNABORTED, EAGAIN):
+        except socket.error as err:
+            if err.args[0] in (EWOULDBLOCK, ECONNABORTED, EAGAIN):
                 return None
             else:
                 raise
@@ -274,17 +274,15 @@ class BaseStreamHandler(object):
             return conn, addr
 
     def send(self, data):
+        result = 0
         try:
             result = self.socket.send(data)
-            return result
-        except socket.error, why:
-            if why.args[0] == EWOULDBLOCK:
-                return 0
-            elif why.args[0] in _DISCONNECTED:
+        except socket.error as err:
+            if err.args[0] in _DISCONNECTED:
                 self.handle_close()
-                return 0
             else:
                 raise
+        return result
 
     def recv(self, buffer_size):
         try:
@@ -296,9 +294,9 @@ class BaseStreamHandler(object):
                 return ''
             else:
                 return data
-        except socket.error, why:
+        except socket.error as err:
             # winsock sometimes raises ENOTCONN
-            if why.args[0] in _DISCONNECTED:
+            if err.args[0] in _DISCONNECTED:
                 self.handle_close()
                 return ''
             else:
@@ -311,8 +309,8 @@ class BaseStreamHandler(object):
         self.del_channel()
         try:
             self.socket.close()
-        except socket.error, why:
-            if why.args[0] not in (ENOTCONN, EBADF):
+        except socket.error as err:
+            if err.args[0] not in (ENOTCONN, EBADF):
                 raise
 
     def handle_read_event(self):
@@ -379,19 +377,20 @@ class StreamHandler(BaseStreamHandler):
 
     def __init__(self, sock=None, map=None):
         super(StreamHandler, self).__init__(sock, map)
-        self.out_buffer = ''
+        self.send_buffer = ''
+        self.buf_bytes = 0
 
-    def initiate_send(self):
-        num_sent = 0
-        num_sent = super(StreamHandler, self).send(self.out_buffer[:4096])
-        self.out_buffer = self.out_buffer[num_sent:]
+    def sendall(self):
+        while self.send_buffer:
+            self.buf_bytes = self.send(self.send_buffer[:4096])
+            self.send_buffer = self.send_buffer[self.buf_bytes:]
 
     def handle_write(self):
-        self.initiate_send()
+        self.sendall()
 
     def writable(self):
-        return (not self.connected) or len(self.out_buffer)
+        return (not self.connected) or len(self.send_buffer)
 
-    def send(self, data):
-        self.out_buffer = self.out_buffer + data
-        self.initiate_send()
+    def write(self, part):
+        self.send_buffer += part
+        self.sendall()
