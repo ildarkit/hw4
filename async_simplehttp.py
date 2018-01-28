@@ -8,6 +8,21 @@ import async_handlers
 
 __version__ = "0.1"
 
+DEFAULT_ERROR_MESSAGE = """
+<head>
+<title>Error response</title>
+</head>
+<body>
+<h1>Error response</h1>
+<p>Error code {code:d}.
+<p>Message: {message}.
+<p>Error code explanation: {code} = {explain}.
+</body>
+"""
+
+DEFAULT_ERROR_CONTENT_TYPE = "text/html"
+
+
 def to_compile_request(method):
     def generator(self):
         result = True
@@ -65,12 +80,12 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         if message is None:
             message = short
         explain = long
-        self.log_error("code %d, message %s", code, message)
+        self.log_error("code {:d}, message {}", code, message)
         # using _quote_html to prevent Cross Site Scripting attacks (see bug #1100201)
-        content = self.error_message_format.format(
+        content = DEFAULT_ERROR_MESSAGE.format(
             {'code': code, 'message': escape(message), 'explain': explain})
         self.send_response(code)
-        self.send_header("Content-Type", self.error_content_type)
+        self.send_header("Content-Type", DEFAULT_ERROR_CONTENT_TYPE)
         self.send_header('Connection', 'close')
         self.end_headers()
         if self.command != 'HEAD' and code >= 200 and code not in (204, 304):
@@ -82,8 +97,9 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         else:
             message = ''
         if self.request_version != 'HTTP/0.9':
-            self.write("%s %d %s\r\n" %
-                      (self.protocol_version, code, message))
+            self.write("{} {:d} {}\r\n".format(
+                self.protocol_version, code, message)
+            )
             # print (self.protocol_version, code, message)
         self.send_header('Server', self.version_string())
         self.send_header('Date', self.date_time_string())
@@ -91,7 +107,7 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
     def send_header(self, keyword, value):
         """Send a MIME header."""
         if self.request_version != 'HTTP/0.9':
-            self.write("%s: %s\r\n".format(keyword, value))
+            self.write("{}: {}\r\n".format(keyword, value))
 
         if keyword.lower() == 'connection':
             if value.lower() == 'close':
@@ -113,7 +129,7 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         if timestamp is None:
             timestamp = time.time()
         year, month, day, hh, mm, ss, wd, y, z = time.gmtime(timestamp)
-        s = "%s, %02d %3s %4d %02d:%02d:%02d GMT".format(
+        s = "{}, {:02d} {:3s} {:4d} {:02d}:{:02d}:{:02d} GMT".format(
                 self.weekdayname[wd],
                 day, self.monthname[month], year,
                 hh, mm, ss)
@@ -132,7 +148,7 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
 
         """
 
-        self.log_message('"%s" %s %s',
+        self.log_message('"{}" {} {}',
                          self.rawrequest, str(code), str(size))
 
     def log_error(self, format, *args):
@@ -166,11 +182,19 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
 
         """
 
-        sys.stderr.write("%s - - [%s] %s\n".format(
-            self.client_address[0],
+        sys.stderr.write("{} - - [{}] {}\n".format(
+            self.addr[0],
             self.log_date_time_string(),
             format.format(args))
         )
+
+    def log_date_time_string(self):
+        """Return the current time formatted for logging."""
+        now = time.time()
+        year, month, day, hh, mm, ss, x = time.localtime(now)
+        s = "{:02d}/{:3s}/{:04d} {:02d}:{:02d}:{:02d}".format(
+            day, self.monthname[month], year, hh, mm, ss)
+        return s
 
     def compile_request(self):
         part = self.gen.next()
@@ -182,12 +206,6 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
             # close the generator
             self.gen.close()
 
-    def handle_get(self):
-        raise NotImplementedError
-
-    def handle_head(self):
-        raise NotImplementedError
-
     @to_compile_request
     def handle_read(self):
         return self.recv(1024)
@@ -197,7 +215,7 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
             return
         name = 'handle_' + self.command.lower()
         if not hasattr(self, name):
-            self.send_error(405, "Unsupported method (%r)".format(self.command))
+            self.send_error(405, "Unsupported method {0!r}".format(self.command))
             return
         method = getattr(self, name)
         method()
@@ -218,7 +236,7 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         if len(words) == 3:
             command, path, version = words
             if version[:5] != 'HTTP/':
-                self.send_error(400, "Bad request version (%r)" % version)
+                self.send_error(400, "Bad request version {0!r}".format(version))
                 return False
             try:
                 base_version_number = version.split('/', 1)[1]
@@ -233,23 +251,23 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
                     raise ValueError
                 version_number = int(version_number[0]), int(version_number[1])
             except (ValueError, IndexError):
-                self.send_error(400, "Bad request version (%r)".format(version))
+                self.send_error(400, "Bad request version {0!r}".format(version))
                 return False
             if version_number >= (1, 1) and self.protocol_version >= "HTTP/1.1":
                 self.close_connection = 0
             if version_number >= (2, 0):
-                self.send_error(505, "Invalid HTTP Version (%s)".format(base_version_number))
+                self.send_error(505, "Invalid HTTP Version {}".format(base_version_number))
                 return False
         elif len(words) == 2:
             command, path = words
             self.close_connection = 1
             if command != 'GET':
-                self.send_error(400, "Bad HTTP/0.9 request type (%r)".format(command))
+                self.send_error(400, "Bad HTTP/0.9 request type {0!r}".format(command))
                 return False
         elif not words:
             return False
         else:
-            self.send_error(400, "Bad request syntax (%r)".format(self.rawrequest))
+            self.send_error(400, "Bad request syntax {0!r}".format(self.rawrequest))
             return False
         self.command, self.path, self.request_version = command, path, version
 

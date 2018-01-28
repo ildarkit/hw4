@@ -6,9 +6,17 @@ import time
 import socket
 import select
 from errno import (EWOULDBLOCK, ECONNRESET, EINVAL, ENOTCONN,
-                   ESHUTDOWN, EINTR, EBADF, ECONNABORTED, EPIPE, EAGAIN)
+                   ESHUTDOWN, EINTR, EBADF, ECONNABORTED, EPIPE, EAGAIN, errorcode)
 
 _DISCONNECTED = frozenset((ECONNRESET, ENOTCONN, ESHUTDOWN, ECONNABORTED, EPIPE, EBADF))
+
+
+def _strerror(err):
+    try:
+        return os.strerror(err)
+    except ValueError:
+        return errorcode[err] if err in errorcode else "Unknown error {}".format(err)
+
 
 socket_map = {}
 
@@ -143,11 +151,11 @@ def select_poller(timeout=0.0, map=None):
             _exception(obj)
 
 
-def loop(timeout=30.0, use_poll=False, map=None, count=None):
+def loop(timeout=30.0, map=None, count=None):
     if map is None:
         map = socket_map
 
-    if use_poll and hasattr(select, 'epoll'):
+    if hasattr(select, 'epoll'):
         poller = epoll_poller
     else:
         poller = select_poller
@@ -203,10 +211,10 @@ class BaseStreamHandler(object):
             status.append('connected')
         if self.addr is not None:
             try:
-                status.append('%s:%d' % self.addr)
+                status.append('{}:{:d}'.format(*self.addr))
             except TypeError:
                 status.append(repr(self.addr))
-        return '<%s at %#x>' % (' '.join(status), id(self))
+        return '<{} at {:#x}>'.format(' '.join(status), id(self))
 
     __str__ = __repr__
 
@@ -335,6 +343,14 @@ class BaseStreamHandler(object):
             if self.connecting:
                 self.handle_connect_event()
         self.handle_write()
+
+    def handle_connect_event(self):
+        err = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+        if err != 0:
+            raise socket.error(err, _strerror(err))
+        self.handle_connect()
+        self.connected = True
+        self.connecting = False
 
     def handle_expt_event(self):
         # handle_expt_event() is called if there might be an error on the

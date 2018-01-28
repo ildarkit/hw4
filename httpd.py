@@ -39,7 +39,7 @@ class TCPServer(async_handlers.BaseStreamHandler):
 if __name__ == '__main__':
     op = OptionParser()
     op.add_option("-p", "--port", action="store", type=int, default=8080)
-    op.add_option("-h", "--host", action="store", default='localhost')
+    op.add_option("-H", "--host", action="store", default='localhost')
     op.add_option("-w", "--workers", action="store", type=int, default=5)
     op.add_option("-r", "--root", action="store", default='root')
     (opts, args) = op.parse_args()
