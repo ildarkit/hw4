@@ -3,6 +3,7 @@
 
 import sys
 import time
+import logging
 
 import async_handlers
 
@@ -16,7 +17,7 @@ DEFAULT_ERROR_MESSAGE = """
 <h1>Error response</h1>
 <p>Error code {code:d}.
 <p>Message: {message}.
-<p>Error code explanation: {code} = {explain}.
+<p>Error code explanation: {code:d} = {explain}.
 </body>
 """
 
@@ -80,10 +81,11 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         if message is None:
             message = short
         explain = long
-        self.log_error("code {:d}, message {}", code, message)
+        self.log_error("response code: {:d} {}", code, message)
         # using _quote_html to prevent Cross Site Scripting attacks (see bug #1100201)
         content = DEFAULT_ERROR_MESSAGE.format(
-            {'code': code, 'message': escape(message), 'explain': explain})
+            code=code, message=escape(message), explain=explain
+        )
         self.send_response(code)
         self.send_header("Content-Type", DEFAULT_ERROR_CONTENT_TYPE)
         self.send_header('Connection', 'close')
@@ -122,13 +124,13 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
 
     def version_string(self):
         """Return the server software version string."""
-        return self.server_version + ' ' + self.sys_version
+        return ' '.join((self.server_version, self.sys_version))
 
     def date_time_string(self, timestamp=None):
         """Return the current date and time formatted for a message header."""
         if timestamp is None:
             timestamp = time.time()
-        year, month, day, hh, mm, ss, wd, y, z = time.gmtime(timestamp)
+        year, month, day, hh, mm, ss, wd = time.gmtime(timestamp)[:-2]
         s = "{}, {:02d} {:3s} {:4d} {:02d}:{:02d}:{:02d} GMT".format(
                 self.weekdayname[wd],
                 day, self.monthname[month], year,
@@ -166,35 +168,10 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         self.log_message(format, *args)
 
     def log_message(self, format, *args):
-        """Log an arbitrary message.
-
-        This is used by all other logging functions.  Override
-        it if you have specific logging wishes.
-
-        The first argument, FORMAT, is a format string for the
-        message to be logged.  If the format string contains
-        any % escapes requiring parameters, they should be
-        specified as subsequent arguments (it's just like
-        printf!).
-
-        The client ip address and current date/time are prefixed to every
-        message.
-
-        """
-
-        sys.stderr.write("{} - - [{}] {}\n".format(
+        logging.error("{} - {}\n".format(
             self.addr[0],
-            self.log_date_time_string(),
-            format.format(args))
+            format.format(*args))
         )
-
-    def log_date_time_string(self):
-        """Return the current time formatted for logging."""
-        now = time.time()
-        year, month, day, hh, mm, ss, x = time.localtime(now)
-        s = "{:02d}/{:3s}/{:04d} {:02d}:{:02d}:{:02d}".format(
-            day, self.monthname[month], year, hh, mm, ss)
-        return s
 
     def compile_request(self):
         part = self.gen.next()

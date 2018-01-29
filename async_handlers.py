@@ -8,7 +8,7 @@ import select
 from errno import (EWOULDBLOCK, ECONNRESET, EINVAL, ENOTCONN,
                    ESHUTDOWN, EINTR, EBADF, ECONNABORTED, EPIPE, EAGAIN, errorcode)
 
-_DISCONNECTED = frozenset((ECONNRESET, ENOTCONN, ESHUTDOWN, ECONNABORTED, EPIPE, EBADF))
+DISCONNECTED = frozenset((ECONNRESET, ENOTCONN, ESHUTDOWN, ECONNABORTED, EPIPE, EBADF))
 
 
 def _strerror(err):
@@ -39,7 +39,7 @@ def readwrite(obj, flags):
         if flags & (select.POLLHUP | select.POLLERR | select.POLLNVAL):
             obj.handle_close()
     except socket.error as e:
-        if e.args[0] not in _DISCONNECTED:
+        if e.args[0] not in DISCONNECTED:
             obj.handle_error()
         else:
             obj.handle_close()
@@ -54,8 +54,8 @@ def read(obj):
         obj.handle_read_event()
     except _reraised_exceptions:
         raise
-    except:
-        obj.handle_error()
+    #except:
+        #obj.handle_error()
 
 
 def write(obj):
@@ -86,7 +86,7 @@ def epoll_poller(timeout=0.0, map=None):
             flags = 0
             if obj.readable():
                 flags |= select.POLLIN | select.POLLPRI
-            if obj.writable():
+            if obj.writable:
                 flags |= select.POLLOUT
             if flags:
                 # Only check for exceptions if object was either readable
@@ -114,7 +114,7 @@ def select_poller(timeout=0.0, map=None):
         r = []; w = []; e = []
         for fd, obj in list(map.items()):
             is_r = obj.readable()
-            is_w = obj.writable()
+            is_w = obj.writable
             if is_r:
                 r.append(fd)
             # accepting sockets should not be writable
@@ -286,7 +286,7 @@ class BaseStreamHandler(object):
         try:
             result = self.socket.send(data)
         except socket.error as err:
-            if err.args[0] in _DISCONNECTED:
+            if err.args[0] in DISCONNECTED:
                 self.handle_close()
             else:
                 raise
@@ -304,7 +304,7 @@ class BaseStreamHandler(object):
                 return data
         except socket.error as err:
             # winsock sometimes raises ENOTCONN
-            if err.args[0] in _DISCONNECTED:
+            if err.args[0] in DISCONNECTED:
                 self.handle_close()
                 return ''
             else:
@@ -322,16 +322,13 @@ class BaseStreamHandler(object):
                 raise
 
     def handle_read_event(self):
+        if not self.connected and self.connecting:
+            self.handle_connect_event()
         if self.accepting:
-            # accepting sockets are never connected, they "spawn" new
-            # sockets that are connected
             self.handle_accept()
-        elif not self.connected:
-            if self.connecting:
-                self.handle_connect_event()
-            self.handle_read()
         else:
             self.handle_read()
+
 
     def handle_write_event(self):
         if self.accepting:
@@ -407,6 +404,7 @@ class StreamHandler(BaseStreamHandler):
     def writable(self):
         return (not self.connected) or len(self.send_buffer)
 
-    def write(self, part):
-        self.send_buffer += part
+    def write(self, part=''):
+        if part:
+            self.send_buffer += part
         self.sendall()
