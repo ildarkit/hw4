@@ -86,7 +86,7 @@ def epoll_poller(timeout=0.0, map=None):
             flags = 0
             if obj.readable():
                 flags |= select.POLLIN | select.POLLPRI
-            if obj.writable:
+            if obj.writable():
                 flags |= select.POLLOUT
             if flags:
                 # Only check for exceptions if object was either readable
@@ -396,7 +396,10 @@ class StreamHandler(BaseStreamHandler):
     def sendall(self):
         while self.send_buffer:
             self.buf_bytes = self.send(self.send_buffer[:4096])
-            self.send_buffer = self.send_buffer[self.buf_bytes:]
+            if self.buf_bytes:
+                self.send_buffer = self.send_buffer[self.buf_bytes:]
+            else:
+                self.send_buffer = ''
 
     def handle_write(self):
         self.sendall()
