@@ -201,7 +201,7 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
             self.send_error(405, "Unsupported method {0!r}".format(self.command))
             return
         method = getattr(self, name)
-        method(self)
+        method()
 
     def parse_request(self):
         """Parse a request (internal).

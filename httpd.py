@@ -81,6 +81,7 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
         for part in self.read_file():
             self.write(part)
             self.sendall()
+        self.sendall()
 
 
 class TCPServer(async_handlers.BaseStreamHandler):
