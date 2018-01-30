@@ -395,7 +395,7 @@ class StreamHandler(BaseStreamHandler):
 
     def sendall(self):
         while self.send_buffer:
-            self.buf_bytes = self.send(self.send_buffer[:4096])
+            self.buf_bytes = self.send(self.send_buffer[:512])
             if self.buf_bytes:
                 self.send_buffer = self.send_buffer[self.buf_bytes:]
             else:
@@ -410,4 +410,4 @@ class StreamHandler(BaseStreamHandler):
     def write(self, part=''):
         if part:
             self.send_buffer += part
-        self.sendall()
+        #self.sendall()

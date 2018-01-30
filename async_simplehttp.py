@@ -10,6 +10,7 @@ import async_handlers
 __version__ = "0.1"
 
 DEFAULT_ERROR_MESSAGE = """
+<html>
 <head>
 <title>Error response</title>
 </head>
@@ -19,6 +20,7 @@ DEFAULT_ERROR_MESSAGE = """
 <p>Message: {message}.
 <p>Error code explanation: {code:d} = {explain}.
 </body>
+</html>
 """
 
 DEFAULT_ERROR_CONTENT_TYPE = "text/html"
@@ -47,11 +49,15 @@ def escape(text):
 class BaseHTTPRequestHandler(async_handlers.StreamHandler):
 
     default_request_version = "HTTP/0.9"
-    protocol_version = "HTTP/1.0"
+    protocol_version = "HTTP/1.1"
     sys_version = "Python/" + sys.version.split()[0]
     server_version = "BaseHTTP/" + __version__
     responses = {
         200: ('OK', 'Request fulfilled, document follows'),
+        400: ('Bad Request',
+              'Bad request syntax or unsupported method'),
+        403: ('Forbidden',
+              'Request forbidden -- authorization will not help'),
         404: ('Not Found', 'Nothing matches the given URI'),
         405: ('Method Not Allowed',
               'Specified method is invalid for this resource.'),
@@ -195,7 +201,7 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
             self.send_error(405, "Unsupported method {0!r}".format(self.command))
             return
         method = getattr(self, name)
-        method()
+        method(self)
 
     def parse_request(self):
         """Parse a request (internal).
@@ -249,5 +255,3 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         self.command, self.path, self.request_version = command, path, version
 
         return True
-
-
