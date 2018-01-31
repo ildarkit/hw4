@@ -114,7 +114,7 @@ def select_poller(timeout=0.0, map=None):
         r = []; w = []; e = []
         for fd, obj in list(map.items()):
             is_r = obj.readable()
-            is_w = obj.writable
+            is_w = obj.writable()
             if is_r:
                 r.append(fd)
             # accepting sockets should not be writable

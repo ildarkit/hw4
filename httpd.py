@@ -13,18 +13,14 @@ import async_simplehttp
 CONTENT_TYPES = {'.html': 'text/html',
                  '.css': 'text/css',
                  '.js': 'text/javascript',
+                 '.txt': 'text/plain',
                  '.jpeg': 'image/jpeg',
                  '.jpg': 'image/jpeg',
                  '.png': 'image/png',
                  '.gif': 'image/gif',
                  '.swg': 'application/x-shockwave-flash'}
 OK = 200
-BAD_REQUEST = 400
-FORBIDDEN = 403
 NOT_FOUND = 404
-INVALID_REQUEST = 422
-INTERNAL_ERROR = 500
-
 INDEX_FILE = 'index.html'
 
 
@@ -33,55 +29,41 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
     def __init__(self, sock=None, map=None, root_dir=''):
         super(HTTPRequestHandler, self).__init__(sock, map)
         self.root_dir = root_dir
-        self.file = ''
-        self.content_length = 0
-        self.content_type = ''
+        self.file = False
 
     def handle_get(self):
         code = OK
         full_path = os.path.join(self.root_dir, self.path)
-        if os.path.exists(full_path):
-            if os.path.isfile(full_path):
-                self.file = full_path
-                self.content_type = CONTENT_TYPES[os.path.splitext(full_path)[1]]
-                self.content_length = os.path.getsize(full_path)
-            elif os.path.isdir(full_path):
-                index_file = os.path.join(full_path, INDEX_FILE)
-                if os.path.exists(index_file):
-                    self.file = index_file
-                    self.content_type = CONTENT_TYPES[os.path.splitext(full_path)[1]]
-                    self.content_length = os.path.getsize(full_path)
-                else:
-                    code = NOT_FOUND
+        if os.path.isdir(full_path):
+            full_path = os.path.join(full_path, INDEX_FILE)
+        if os.path.isfile(full_path):
+            self.file = True
+            self.content = full_path
+            self.content_type = CONTENT_TYPES[os.path.splitext(full_path)[1].lower()]
+            self.content_length = os.path.getsize(full_path)
         else:
             code = NOT_FOUND
+            self.send_error(code)
+            return
 
         self.send_response(code)
-        if self.content_type:
-            self.send_header("Content-Type", self.content_type)
-        if self.content_length:
-            self.send_header("Content-Length", self.content_length)
-        self.end_headers()
-        # self.write()
 
     def handle_head(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html")
-        self.end_headers()
+        self.send_response(OK)
 
     def read_file(self):
-        if self.file:
-            with open(self.file, 'rb') as response_file:
-                part = True
-                while part:
-                    part = response_file.read(1024)
-                    yield part
+        with open(self.content, 'rb') as content_file:
+            part = True
+            while part:
+                part = content_file.read(1024)
+                yield part
 
-    def handle_write(self):
-        for part in self.read_file():
-            self.write(part)
-            self.sendall()
-        self.sendall()
+    def send_response(self, code):
+        super(HTTPRequestHandler, self).send_response(code)
+        if self.file:
+            for part in self.read_file():
+                self.write(part)
+                self.sendall()
 
 
 class TCPServer(async_handlers.BaseStreamHandler):
@@ -119,7 +101,7 @@ if __name__ == '__main__':
     op.add_option("-p", "--port", action="store", type=int, default=8080)
     op.add_option("-H", "--host", action="store", default='localhost')
     op.add_option("-w", "--workers", action="store", type=int, default=5)
-    op.add_option("-r", "--root", action="store", default='')
+    op.add_option("-r", "--root", action="store", default=r'D:\otus_python\http-test-suite\httptest')
     op.add_option("-l", "--log", action="store", default=None)
     (opts, args) = op.parse_args()
     logging.basicConfig(filename=opts.log, level=logging.INFO,
