@@ -24,26 +24,6 @@ DEFAULT_ERROR_MESSAGE = """<html>
 DEFAULT_ERROR_CONTENT_TYPE = "text/html"
 
 
-def to_compile_request(method):
-    def generator(self):
-        result = True
-        while result:
-            result = method(self)
-            yield result
-
-    def wrapper(self):
-        if not hasattr(self, 'gen'):
-            self.gen = generator(self)
-
-        self.compile_request()
-
-    return wrapper
-
-
-def escape(text):
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
 class BaseHTTPRequestHandler(async_handlers.StreamHandler):
 
     default_request_version = "HTTP/0.9"
@@ -54,11 +34,10 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         200: ('OK', 'Request fulfilled, document follows'),
         400: ('Bad Request',
               'Bad request syntax or unsupported method'),
-        403: ('Forbidden',
-              'Request forbidden -- authorization will not help'),
         404: ('Not Found', 'Nothing matches the given URI'),
         405: ('Method Not Allowed',
               'Specified method is invalid for this resource.'),
+        505: ('HTTP Version Not Supported', 'Cannot fulfill request.')
     }
 
     def __init__(self, sock=None, map=None):
@@ -68,51 +47,38 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         self.content = ''
         self.content_length = 0
 
-    def send_headers(self):
+    def send_headers(self, code):
         self.send_header('Server', self.version_string())
         self.send_header('Date', self.date_time_string())
-        if self.content and self.command != 'HEAD':
+        if code != 200:
+            self.send_error(code)
+        self.send_header('Content-Length', self.content_length)
+        if self.content_type:
             self.send_header("Content-Type", self.content_type)
-            self.send_header('Content-Length', self.content_length)
 
     def send_response(self, code):
         self.send_status_code(code)
-        self.send_headers()
+        self.send_headers(code)
         self.end_headers()
+        if code != 200:
+            self.send_error_body()
 
+    def send_error_body(self):
+        if self.command != 'HEAD':
+            self.write(self.content)
 
-    def send_error(self, code, message=None):
-        """Send and log an error reply.
-
-        Arguments are the error code, and a detailed message.
-        The detailed message defaults to the short entry matching the
-        response code.
-
-        This sends an error response (so it must be called before any
-        output has been generated), logs the error, and finally sends
-        a piece of HTML explaining the error to the user.
-
-        """
-
+    def send_error(self, code):
         try:
             short, long = self.responses[code]
         except KeyError:
             short, long = '???', '???'
-        if message is None:
-            message = short
-        explain = long
-        self.log_error("response code: {:d} {}", code, message)
-        self.content = DEFAULT_ERROR_MESSAGE.format(
-            code=code, message=escape(message), explain=explain
-        )
-        self.content_type = DEFAULT_ERROR_CONTENT_TYPE
-        self.content_length = len(self.content)
-        self.send_status_code(code)
-        self.send_headers()
-        self.send_header('Connection', 'close')
-        self.end_headers()
-        if self.command != 'HEAD' and code >= 200 and code not in (204, 304):
-            self.write(self.content)
+        self.log_error("response code: {:d} {}", code, short)
+        if self.command != 'HEAD':
+            self.content = DEFAULT_ERROR_MESSAGE.format(
+                code=code, message=short, explain=long
+            )
+            self.content_type = DEFAULT_ERROR_CONTENT_TYPE
+            self.content_length = len(self.content)
 
     def send_status_code(self, code):
         if code in self.responses:
@@ -161,26 +127,18 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
             format.format(*args))
         )
 
-    def compile_request(self):
-        part = self.gen.next()
+    def handle_read(self):
+        part = self.recv(1024)
         if part:
             self.rawrequest += part
             self.handle_request()
-        else:
-            # client was disconnected
-            # close generator
-            self.gen.close()
-
-    @to_compile_request
-    def handle_read(self):
-        return self.recv(1024)
 
     def handle_request(self):
         if not self.validate_start_line():
             return
         name = 'handle_' + self.command.lower()
         if not hasattr(self, name):
-            self.send_error(405, "Unsupported method {0!r}".format(self.command))
+            self.send_response(405)
             return
         method = getattr(self, name)
         method()
@@ -194,7 +152,7 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         if len(words) == 3:
             command, path, version = words
             if version[:5] != 'HTTP/':
-                self.send_error(400, "Bad request version {0!r}".format(version))
+                self.send_response(400)
                 return False
             try:
                 base_version_number = version.split('/', 1)[1]
@@ -209,20 +167,20 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
                     raise ValueError
                 version_number = int(version_number[0]), int(version_number[1])
             except (ValueError, IndexError):
-                self.send_error(400, "Bad request version {0!r}".format(version))
+                self.send_response(400)
                 return False
             if version_number >= (2, 0):
-                self.send_error(505, "Invalid HTTP Version {}".format(base_version_number))
+                self.send_error(505)
                 return False
         elif len(words) == 2:
             command, path = words
             if command != 'GET':
-                self.send_error(400, "Bad HTTP/0.9 request type {0!r}".format(command))
+                self.send_response(400)
                 return False
         elif not words:
             return False
         else:
-            self.send_error(400, "Bad request syntax {0!r}".format(self.rawrequest))
+            self.send_response(400)
             return False
         self.command, self.path, self.request_version = command, path, version
 

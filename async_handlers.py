@@ -395,19 +395,17 @@ class StreamHandler(BaseStreamHandler):
 
     def sendall(self):
         while self.send_buffer:
-            self.buf_bytes = self.send(self.send_buffer[:1024])
+            self.buf_bytes = self.send(self.send_buffer[:512 * 1024])
             if self.buf_bytes:
                 self.send_buffer = self.send_buffer[self.buf_bytes:]
             else:
                 self.send_buffer = ''
 
-    def handle_write(self):
-        self.sendall()
-
     def writable(self):
         return (not self.connected) or len(self.send_buffer)
 
-    def write(self, part=''):
+    def write(self, part='', buffered=True):
         if part:
             self.send_buffer += part
-        #self.sendall()
+        if not buffered:
+            self.sendall()

@@ -18,7 +18,7 @@ CONTENT_TYPES = {'.html': 'text/html',
                  '.jpg': 'image/jpeg',
                  '.png': 'image/png',
                  '.gif': 'image/gif',
-                 '.swg': 'application/x-shockwave-flash'}
+                 '.swf': 'application/x-shockwave-flash'}
 OK = 200
 NOT_FOUND = 404
 INDEX_FILE = 'index.html'
@@ -29,41 +29,78 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
     def __init__(self, sock=None, map=None, root_dir=''):
         super(HTTPRequestHandler, self).__init__(sock, map)
         self.root_dir = root_dir
-        self.file = False
+        self.resource_found = False
 
     def handle_get(self):
+        self.handle_head()
+
+    def handle_head(self):
+        code = self.get_content()
+        self.send_response(code)
+
+    def get_content(self):
         code = OK
         full_path = os.path.join(self.root_dir, self.path)
         if os.path.isdir(full_path):
             full_path = os.path.join(full_path, INDEX_FILE)
         if os.path.isfile(full_path):
-            self.file = True
             self.content = full_path
             self.content_type = CONTENT_TYPES[os.path.splitext(full_path)[1].lower()]
-            self.content_length = os.path.getsize(full_path)
+            self.resource_found = True
         else:
             code = NOT_FOUND
-            self.send_error(code)
-            return
-
-        self.send_response(code)
-
-    def handle_head(self):
-        self.send_response(OK)
+        if self.command == 'HEAD':
+            self.content_length = len(self.rawrequest.rstrip())
+            # для того, чтобы пропустить чтение-запись файла
+            self.resource_found = False
+        elif self.resource_found:
+            self.content_length = os.path.getsize(full_path)
+        return code
 
     def read_file(self):
         with open(self.content, 'rb') as content_file:
             part = True
             while part:
-                part = content_file.read(1024)
+                part = content_file.read()
                 yield part
 
-    def send_response(self, code):
-        super(HTTPRequestHandler, self).send_response(code)
-        if self.file:
-            for part in self.read_file():
-                self.write(part)
+    def writelines(self):
+        buf = lines = s = ''
+        part = True
+        while part:
+            part = yield
+            if buf:
+                splited = buf.rsplit('\n', 1)
+                if len(splited) == 2:
+                    lines, tail = splited
+                    lines += '\n'
+                else:
+                    lines = splited[0]
+                    tail = ''
+                buf = tail
+            if part:
+                buf += part
+            else:
+                lines += buf
+            if lines:
+                s += lines
+                self.write(lines)
                 self.sendall()
+                lines = ''
+
+    def handle_write(self):
+        if self.resource_found:
+            if 'text' in self.content_type:
+                cor = self.writelines()
+                next(cor)
+                for part in self.read_file():
+                    cor.send(part)
+            else:
+                for part in self.read_file():
+                    self.write(part)
+                    self.sendall()
+        else:
+            self.write('', False)
 
 
 class TCPServer(async_handlers.BaseStreamHandler):
@@ -101,7 +138,7 @@ if __name__ == '__main__':
     op.add_option("-p", "--port", action="store", type=int, default=8080)
     op.add_option("-H", "--host", action="store", default='localhost')
     op.add_option("-w", "--workers", action="store", type=int, default=5)
-    op.add_option("-r", "--root", action="store", default=r'D:\otus_python\http-test-suite\httptest')
+    op.add_option("-r", "--root", action="store", default=r'D:\otus_python\http-test-suite')
     op.add_option("-l", "--log", action="store", default=None)
     (opts, args) = op.parse_args()
     logging.basicConfig(filename=opts.log, level=logging.INFO,
