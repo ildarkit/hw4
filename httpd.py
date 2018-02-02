@@ -41,6 +41,7 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
     def get_content(self):
         code = OK
         full_path = os.path.join(self.root_dir, self.path)
+        full_path = self.url_decode(full_path)
         if os.path.isdir(full_path):
             full_path = os.path.join(full_path, INDEX_FILE)
         if os.path.isfile(full_path):

@@ -133,6 +133,15 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
             format.format(*args))
         )
 
+    @staticmethod
+    def url_decode(url):
+        codes = url.split('%')
+        for i, code in enumerate(codes):
+            if len(code) == 2:
+                c = chr(int(code, 16))
+                codes[i] = c
+        return ''.join(codes)
+
     def handle_read(self):
         while True:
             part = self.recv(1024)
