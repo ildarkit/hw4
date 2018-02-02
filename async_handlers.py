@@ -5,7 +5,7 @@ import os
 import time
 import socket
 import select
-from errno import (EWOULDBLOCK, ECONNRESET, EINVAL, ENOTCONN,
+from errno import (EWOULDBLOCK, ECONNRESET, EINVAL, ENOTCONN, WSAEWOULDBLOCK,
                    ESHUTDOWN, EINTR, EBADF, ECONNABORTED, EPIPE, EAGAIN, errorcode)
 
 DISCONNECTED = frozenset((ECONNRESET, ENOTCONN, ESHUTDOWN, ECONNABORTED, EPIPE, EBADF))
@@ -54,8 +54,8 @@ def read(obj):
         obj.handle_read_event()
     except _reraised_exceptions:
         raise
-    #except:
-        #obj.handle_error()
+    except:
+        obj.handle_error()
 
 
 def write(obj):
@@ -296,16 +296,14 @@ class BaseStreamHandler(object):
         try:
             data = self.socket.recv(buffer_size)
             if not data:
-                # a closed connection is indicated by signaling
-                # a read condition, and having recv() return 0.
-                self.handle_close()
-                return ''
-            else:
-                return data
+                data = ''
+            return data
         except socket.error as err:
             # winsock sometimes raises ENOTCONN
             if err.args[0] in DISCONNECTED:
                 self.handle_close()
+                return ''
+            elif err.args[0] == WSAEWOULDBLOCK:
                 return ''
             else:
                 raise
@@ -395,7 +393,7 @@ class StreamHandler(BaseStreamHandler):
 
     def sendall(self):
         while self.send_buffer:
-            self.buf_bytes = self.send(self.send_buffer[:512 * 1024])
+            self.buf_bytes = self.send(self.send_buffer[:64 * 1024])
             if self.buf_bytes:
                 self.send_buffer = self.send_buffer[self.buf_bytes:]
             else:

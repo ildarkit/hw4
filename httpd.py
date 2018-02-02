@@ -55,52 +55,41 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
             self.resource_found = False
         elif self.resource_found:
             self.content_length = os.path.getsize(full_path)
+            if self.content_length > 64 * 1024:
+                self.chunked = True
+            # создание генератора
+            self.file_reader = self.read_file()
         return code
 
     def read_file(self):
         with open(self.content, 'rb') as content_file:
             part = True
             while part:
-                part = content_file.read()
+                part = content_file.read(64 * 1024)
                 yield part
-
-    def writelines(self):
-        buf = lines = s = ''
-        part = True
-        while part:
-            part = yield
-            if buf:
-                splited = buf.rsplit('\n', 1)
-                if len(splited) == 2:
-                    lines, tail = splited
-                    lines += '\n'
-                else:
-                    lines = splited[0]
-                    tail = ''
-                buf = tail
-            if part:
-                buf += part
-            else:
-                lines += buf
-            if lines:
-                s += lines
-                self.write(lines)
-                self.sendall()
-                lines = ''
 
     def handle_write(self):
         if self.resource_found:
-            if 'text' in self.content_type:
-                cor = self.writelines()
-                next(cor)
-                for part in self.read_file():
-                    cor.send(part)
-            else:
-                for part in self.read_file():
-                    self.write(part)
-                    self.sendall()
+            buffering = True
+            looping = True
+            while looping:
+                part = self.file_reader.next()
+                if self.chunked:
+                    chunk_len = hex(len(part))
+                    chunk_len = chunk_len.lstrip('0x')
+                    self.write(chunk_len + '\r\n')
+                    looping = False
+                if not part:
+                    buffering = False
+                    looping = False
+                    self.file_reader.close()
+                    self.closing = True
+                self.write(part, buffered=buffering)
         else:
-            self.write('', False)
+            self.write('', buffered=False)
+            self.closing = True
+        if self.closing:
+            self.handle_close()
 
 
 class TCPServer(async_handlers.BaseStreamHandler):
@@ -118,7 +107,7 @@ class TCPServer(async_handlers.BaseStreamHandler):
         pair = self.accept()
         if pair is not None:
             sock, addr = pair
-            logging.info('Incoming connection from {0!r}'.format(addr))
+            # logging.info('Incoming connection from {0!r}'.format(addr))
             _ = self.handlerclass(sock, root_dir=self.root_dir)
 
 

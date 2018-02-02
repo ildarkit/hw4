@@ -37,6 +37,7 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         404: ('Not Found', 'Nothing matches the given URI'),
         405: ('Method Not Allowed',
               'Specified method is invalid for this resource.'),
+        500: ('Internal Server Error', 'Server got itself in trouble'),
         505: ('HTTP Version Not Supported', 'Cannot fulfill request.')
     }
 
@@ -46,10 +47,13 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         self.content_type = ''
         self.content = ''
         self.content_length = 0
+        self.chunked = False
 
     def send_headers(self, code):
         self.send_header('Server', self.version_string())
         self.send_header('Date', self.date_time_string())
+        if self.chunked:
+            self.send_header("Transfer-Encoding", 'chunked')
         if code != 200:
             self.send_error(code)
         self.send_header('Content-Length', self.content_length)
@@ -65,14 +69,14 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
 
     def send_error_body(self):
         if self.command != 'HEAD':
-            self.write(self.content)
+            self.write(self.content, buffered=False)
 
-    def send_error(self, code):
+    def send_error(self, code, log=logging.error):
         try:
             short, long = self.responses[code]
         except KeyError:
             short, long = '???', '???'
-        self.log_error("response code: {:d} {}", code, short)
+        self.log_error("- Status code: {:d} {}", code, short, log=log)
         if self.command != 'HEAD':
             self.content = DEFAULT_ERROR_MESSAGE.format(
                 code=code, message=short, explain=long
@@ -121,17 +125,22 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
                  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-    def log_error(self, format, *args):
-        logging.error("{} - {}\n".format(
+    def log_error(self, format, *args, **kwargs):
+        kwargs['log']("{} - {} {} {}\n".format(
             self.addr[0],
+            self.command,
+            self.path,
             format.format(*args))
         )
 
     def handle_read(self):
-        part = self.recv(1024)
-        if part:
-            self.rawrequest += part
-            self.handle_request()
+        while True:
+            part = self.recv(1024)
+            if part:
+                self.rawrequest += part
+            else:
+                break
+        self.handle_request()
 
     def handle_request(self):
         if not self.validate_start_line():
@@ -142,6 +151,13 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
             return
         method = getattr(self, name)
         method()
+
+    def handle_error(self):
+        self.send_response(500)
+        super(BaseHTTPRequestHandler, self).handle_error()
+
+    # def handle_expt(self):
+       # self.log_error()
 
     def validate_start_line(self):
         self.command = None  # set in case of error on the first line
