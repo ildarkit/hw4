@@ -87,8 +87,8 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
                     self.closing = True
                 self.write(part, buffered=buffering)
         else:
-            self.write('', buffered=False)
             self.closing = True
+            self.write('', buffered=False)
         if self.closing:
             self.handle_close()
 

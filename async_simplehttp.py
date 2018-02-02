@@ -149,7 +149,10 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
                 self.rawrequest += part
             else:
                 break
-        self.handle_request()
+        if self.rawrequest:
+            self.handle_request()
+        else:
+            self.handle_close()
 
     def handle_request(self):
         if not self.validate_start_line():

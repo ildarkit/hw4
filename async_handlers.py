@@ -294,10 +294,7 @@ class BaseStreamHandler(object):
 
     def recv(self, buffer_size):
         try:
-            data = self.socket.recv(buffer_size)
-            if not data:
-                data = ''
-            return data
+            return self.socket.recv(buffer_size)
         except socket.error as err:
             # winsock sometimes raises ENOTCONN
             if err.args[0] in DISCONNECTED:
@@ -398,6 +395,8 @@ class StreamHandler(BaseStreamHandler):
                 self.send_buffer = self.send_buffer[self.buf_bytes:]
             else:
                 self.send_buffer = ''
+        if self.closing:
+            self.send('')
 
     def writable(self):
         return (not self.connected) or len(self.send_buffer)
