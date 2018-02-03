@@ -288,6 +288,8 @@ class BaseStreamHandler(object):
         except socket.error as err:
             if err.args[0] in DISCONNECTED:
                 self.handle_close()
+            elif err.args[0] == WSAEWOULDBLOCK:
+                pass
             else:
                 raise
         return result
@@ -388,21 +390,27 @@ class StreamHandler(BaseStreamHandler):
         self.send_buffer = ''
         self.buf_bytes = 0
 
-    def sendall(self):
-        while self.send_buffer:
-            self.buf_bytes = self.send(self.send_buffer[:64 * 1024])
+    def sendall(self, data):
+        while data:
+            self.buf_bytes = self.send(data)
             if self.buf_bytes:
-                self.send_buffer = self.send_buffer[self.buf_bytes:]
+                data = data[self.buf_bytes:]
             else:
-                self.send_buffer = ''
+                data = ''
         if self.closing:
             self.send('')
 
     def writable(self):
         return (not self.connected) or len(self.send_buffer)
 
-    def write(self, part='', buffered=True):
+    def write(self, part='', buffered=True, send_size=2048):
         if part:
             self.send_buffer += part
         if not buffered:
-            self.sendall()
+            # в случае когда нужно отправлять chunk-ми,
+            # очищаем не весь буфер для того,
+            # чтобы оставаться writeable
+            if self.send_buffer:
+                data = self.send_buffer[:send_size]
+                self.send_buffer = self.send_buffer[send_size:]
+                self.sendall(data)

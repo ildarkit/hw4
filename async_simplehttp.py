@@ -48,15 +48,16 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         self.content = ''
         self.content_length = 0
         self.chunked = False
+        self.chunk_size = 2048
 
     def send_headers(self, code):
         self.send_header('Server', self.version_string())
         self.send_header('Date', self.date_time_string())
         if self.chunked:
             self.send_header("Transfer-Encoding", 'chunked')
+        self.send_header('Content-Length', self.content_length)
         if code != 200:
             self.send_error(code)
-        self.send_header('Content-Length', self.content_length)
         if self.content_type:
             self.send_header("Content-Type", self.content_type)
 
@@ -69,7 +70,8 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
 
     def send_error_body(self):
         if self.command != 'HEAD':
-            self.write(self.content, buffered=False)
+            self.write(self.content, buffered=False,
+                       send_size=self.chunk_size)
 
     def send_error(self, code, log=logging.error):
         try:

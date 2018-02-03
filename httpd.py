@@ -30,6 +30,7 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
         super(HTTPRequestHandler, self).__init__(sock, map)
         self.root_dir = root_dir
         self.resource_found = False
+        self.chunk_size = 64 * 1024
 
     def handle_get(self):
         self.handle_head()
@@ -40,7 +41,8 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
 
     def get_content(self):
         code = OK
-        full_path = os.path.join(self.root_dir, self.path)
+        full_path = self.root_dir + self.path.split('?', 1)[0]
+        full_path = os.path.normpath(full_path)
         full_path = self.url_decode(full_path)
         if os.path.isdir(full_path):
             full_path = os.path.join(full_path, INDEX_FILE)
@@ -56,9 +58,10 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
             self.resource_found = False
         elif self.resource_found:
             self.content_length = os.path.getsize(full_path)
-            if self.content_length > 64 * 1024:
+            # большой файл отправляем не сразу весь целиком, а chunk-ми
+            if self.content_length > self.chunk_size:
                 self.chunked = True
-            # создание генератора
+            # возвращаем генератор
             self.file_reader = self.read_file()
         return code
 
@@ -66,29 +69,48 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
         with open(self.content, 'rb') as content_file:
             part = True
             while part:
-                part = content_file.read(64 * 1024)
+                part = content_file.read(self.chunk_size)
                 yield part
 
     def handle_write(self):
         if self.resource_found:
-            buffering = True
+            if self.chunked:
+                # большой файл отдаем chunk-ми
+                # в буфере всегда остается какая-то часть от
+                # предыдущей итерации, чтобы оставаться writeable
+                buffering = False
+            else:
+                # все прочитанное из файла складываем в буфер и выходим из обработчика
+                # при следующем возникновении события на запись, отправляем
+                buffering = True
             looping = True
+
             while looping:
                 part = self.file_reader.next()
-                if self.chunked:
-                    chunk_len = hex(len(part))
-                    chunk_len = chunk_len.lstrip('0x')
-                    self.write(chunk_len + '\r\n')
-                    looping = False
-                if not part:
+                _bytes = len(part)
+                if _bytes < self.chunk_size:
+                    # из файла ничего не прочитали
+                    # или же прочитано меньше,
+                    # отправляем последний chunk и надо закрываться
                     buffering = False
                     looping = False
                     self.file_reader.close()
                     self.closing = True
-                self.write(part, buffered=buffering)
+
+                if self.chunked:
+                    # записываем длину блока
+                    chunk_len = hex(_bytes)
+                    chunk_len = chunk_len.lstrip('0x')
+                    self.write(chunk_len + '\r\n')
+                    looping = False
+                    part += '\r\n'
+
+                self.write(part, buffered=buffering,
+                           send_size=self.chunk_size)
         else:
             self.closing = True
-            self.write('', buffered=False)
+            self.write('', buffered=False,
+                       send_size=self.chunk_size)
         if self.closing:
             self.handle_close()
 
@@ -128,7 +150,7 @@ if __name__ == '__main__':
     op.add_option("-p", "--port", action="store", type=int, default=8080)
     op.add_option("-H", "--host", action="store", default='localhost')
     op.add_option("-w", "--workers", action="store", type=int, default=5)
-    op.add_option("-r", "--root", action="store", default=r'D:\otus_python\http-test-suite')
+    op.add_option("-r", "--root", action="store", default='c:\\otus_python\\http-test-suite\\')
     op.add_option("-l", "--log", action="store", default=None)
     (opts, args) = op.parse_args()
     logging.basicConfig(filename=opts.log, level=logging.INFO,
