@@ -41,9 +41,8 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
 
     def get_content(self):
         code = OK
-        full_path = self.root_dir + self.path.split('?', 1)[0]
+        full_path = self.root_dir + self.url_decode(self.path.split('?', 1)[0])
         full_path = os.path.normpath(full_path)
-        full_path = self.url_decode(full_path)
         if os.path.isdir(full_path):
             full_path = os.path.join(full_path, INDEX_FILE)
         if os.path.isfile(full_path):
@@ -90,7 +89,7 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
                 _bytes = len(part)
                 if _bytes < self.chunk_size:
                     # из файла ничего не прочитали
-                    # или же прочитано меньше,
+                    # или же все, что меньше chunk_size
                     # отправляем последний chunk и надо закрываться
                     buffering = False
                     looping = False
