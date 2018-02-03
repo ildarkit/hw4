@@ -21,6 +21,7 @@ CONTENT_TYPES = {'.html': 'text/html',
                  '.swf': 'application/x-shockwave-flash'}
 OK = 200
 NOT_FOUND = 404
+FORBIDDEN = 403
 INDEX_FILE = 'index.html'
 
 
@@ -30,7 +31,7 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
         super(HTTPRequestHandler, self).__init__(sock, map)
         self.root_dir = root_dir
         self.resource_found = False
-        self.chunk_size = 64 * 1024
+        self.chunk_size = 1024 * 1024
 
     def handle_get(self):
         self.handle_head()
@@ -41,14 +42,18 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
 
     def get_content(self):
         code = OK
+        try_index_file = False
         full_path = self.root_dir + self.url_decode(self.path.split('?', 1)[0])
         full_path = os.path.normpath(full_path)
         if os.path.isdir(full_path):
             full_path = os.path.join(full_path, INDEX_FILE)
+            try_index_file = True
         if os.path.isfile(full_path):
             self.content = full_path
             self.content_type = CONTENT_TYPES[os.path.splitext(full_path)[1].lower()]
             self.resource_found = True
+        elif try_index_file:
+            code = FORBIDDEN
         else:
             code = NOT_FOUND
         if self.command == 'HEAD':

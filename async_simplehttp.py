@@ -36,6 +36,8 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         400: ('Bad Request',
               'Bad request syntax or unsupported method'),
         404: ('Not Found', 'Nothing matches the given URI'),
+        403: ('Forbidden',
+              'Request forbidden -- authorization will not help'),
         405: ('Method Not Allowed',
               'Specified method is invalid for this resource.'),
         500: ('Internal Server Error', 'Server got itself in trouble'),
