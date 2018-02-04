@@ -58,11 +58,11 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         self.send_header('Date', self.date_time_string())
         if self.chunked:
             self.send_header("Transfer-Encoding", 'chunked')
-        self.send_header('Content-Length', self.content_length)
         if code != 200:
             self.send_error(code)
         if self.content_type:
             self.send_header("Content-Type", self.content_type)
+            self.send_header('Content-Length', self.content_length)
 
     def send_response(self, code):
         self.send_status_code(code)

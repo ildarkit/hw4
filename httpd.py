@@ -135,7 +135,7 @@ class TCPServer(async_handlers.BaseStreamHandler):
         if pair is not None:
             sock, addr = pair
             worker_name = multiprocessing.current_process().name
-            logging.info('{}: Incoming connection from {}'.format(worker_name, addr))
+            #logging.info('{}: Incoming connection from {}'.format(worker_name, addr))
             _ = self.handlerclass(sock, root_dir=self.root_dir)
 
 
@@ -156,7 +156,7 @@ if __name__ == '__main__':
 
     server = HTTPServer((opts.host, opts.port), HTTPRequestHandler, root_dir=opts.root)
     logging.info("Starting {} workers at {}".format(opts.workers, opts.port))
-    multiprocessing.log_to_stderr(logging.INFO)
+    #multiprocessing.log_to_stderr(logging.INFO)
     for i in range(opts.workers):
         p = multiprocessing.Process(target=async_handlers.loop,
                                     name='worker' + str(i))
