@@ -5,7 +5,7 @@ import os
 import time
 import socket
 import select
-from errno import (EWOULDBLOCK, ECONNRESET, EINVAL, ENOTCONN, WSAEWOULDBLOCK,
+from errno import (EWOULDBLOCK, ECONNRESET, EINVAL, ENOTCONN,
                    ESHUTDOWN, EINTR, EBADF, ECONNABORTED, EPIPE, EAGAIN, errorcode)
 
 DISCONNECTED = frozenset((ECONNRESET, ENOTCONN, ESHUTDOWN, ECONNABORTED, EPIPE, EBADF))
@@ -288,7 +288,7 @@ class BaseStreamHandler(object):
         except socket.error as err:
             if err.args[0] in DISCONNECTED:
                 self.handle_close()
-            elif err.args[0] == WSAEWOULDBLOCK:
+            elif err.args[0] == EWOULDBLOCK:
                 pass
             else:
                 raise
@@ -302,7 +302,7 @@ class BaseStreamHandler(object):
             if err.args[0] in DISCONNECTED:
                 self.handle_close()
                 return ''
-            elif err.args[0] == WSAEWOULDBLOCK:
+            elif err.args[0] == EWOULDBLOCK:
                 return ''
             else:
                 raise

@@ -4,7 +4,7 @@
 import os
 import socket
 import logging
-from multiprocessing import Process
+import multiprocessing
 from optparse import OptionParser
 
 import async_handlers
@@ -134,35 +134,38 @@ class TCPServer(async_handlers.BaseStreamHandler):
         pair = self.accept()
         if pair is not None:
             sock, addr = pair
-            # logging.info('Incoming connection from {0!r}'.format(addr))
+            worker_name = multiprocessing.current_process().name
+            logging.info('{}: Incoming connection from {}'.format(worker_name, addr))
             _ = self.handlerclass(sock, root_dir=self.root_dir)
 
 
 HTTPServer = TCPServer
 
 
-def serving_loop(server):
-    try:
-        async_handlers.loop()
-    except KeyboardInterrupt:
-        server.close()
-        logging.info('Close server {}'.format(server))
-
-
 if __name__ == '__main__':
+    workers = []
     op = OptionParser()
     op.add_option("-p", "--port", action="store", type=int, default=8080)
     op.add_option("-H", "--host", action="store", default='localhost')
     op.add_option("-w", "--workers", action="store", type=int, default=5)
-    op.add_option("-r", "--root", action="store", default='c:\\otus_python\\http-test-suite\\')
+    op.add_option("-r", "--root", action="store", default='/home/ildark/otus_python/http-test-suite')
     op.add_option("-l", "--log", action="store", default=None)
     (opts, args) = op.parse_args()
     logging.basicConfig(filename=opts.log, level=logging.INFO,
                         format='[%(asctime)s] %(levelname)s %(message)s', datefmt='%Y.%m.%d %H:%M:%S')
+
     server = HTTPServer((opts.host, opts.port), HTTPRequestHandler, root_dir=opts.root)
     logging.info("Starting {} workers at {}".format(opts.workers, opts.port))
-    #for _ in range(opts.workers):
-        #p = Process(target=serving_loop, args=(server,))
-        #p.start()
-        #p.join()
-    serving_loop(server)
+    multiprocessing.log_to_stderr(logging.INFO)
+    for i in range(opts.workers):
+        p = multiprocessing.Process(target=async_handlers.loop,
+                                    name='worker' + str(i))
+        workers.append(p)
+
+    for worker in workers:
+        worker.start()
+
+    for worker in workers:
+        worker.join()
+    server.close()
+
