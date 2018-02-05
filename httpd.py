@@ -30,13 +30,14 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
     def __init__(self, sock=None, map=None, root_dir=''):
         super(HTTPRequestHandler, self).__init__(sock, map)
         self.root_dir = root_dir
-        self.resource_found = False
         self.chunk_size = 1024 * 1024
 
     def handle_get(self):
+        """Обработчик GET-запроса"""
         self.handle_head()
 
     def handle_head(self):
+        """Обработчик HEAD-запроса"""
         code = self.get_content()
         self.send_response(code)
 
@@ -51,7 +52,7 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
         if os.path.isfile(full_path):
             self.content = full_path
             self.content_type = CONTENT_TYPES[os.path.splitext(full_path)[1].lower()]
-            self.resource_found = True
+            self.resource = True
         elif try_index_file:
             code = FORBIDDEN
         else:
@@ -59,64 +60,31 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
         if self.command == 'HEAD':
             self.content_length = len(self.rawrequest.rstrip())
             # для того, чтобы пропустить чтение-запись файла
-            self.resource_found = False
-        elif self.resource_found:
+            self.resource = False
+        elif self.resource:
             self.content_length = os.path.getsize(full_path)
             # большой файл отправляем не сразу весь целиком, а chunk-ми
             if self.content_length > self.chunk_size:
                 self.chunked = True
             # возвращаем генератор
-            self.file_reader = self.read_file()
+            self._reader = self.reader()
         return code
 
-    def read_file(self):
+    def read_resourse(self):
+        return self._reader.next()
+
+    def reader(self):
         with open(self.content, 'rb') as content_file:
             part = True
             while part:
                 part = content_file.read(self.chunk_size)
                 yield part
 
-    def handle_write(self):
-        if self.resource_found:
-            if self.chunked:
-                # большой файл отдаем chunk-ми
-                # в буфере всегда остается какая-то часть от
-                # предыдущей итерации, чтобы оставаться writeable
-                buffering = False
-            else:
-                # все прочитанное из файла складываем в буфер и выходим из обработчика
-                # при следующем возникновении события на запись, отправляем
-                buffering = True
-            looping = True
-
-            while looping:
-                part = self.file_reader.next()
-                _bytes = len(part)
-                if _bytes < self.chunk_size:
-                    # из файла ничего не прочитали
-                    # или же все, что меньше chunk_size
-                    # отправляем последний chunk и надо закрываться
-                    buffering = False
-                    looping = False
-                    self.file_reader.close()
-                    self.closing = True
-
-                if self.chunked:
-                    # записываем длину блока
-                    chunk_len = hex(_bytes)
-                    chunk_len = chunk_len.lstrip('0x')
-                    self.write(chunk_len + '\r\n')
-                    looping = False
-                    part += '\r\n'
-
-                self.write(part, buffered=buffering,
-                           send_size=self.chunk_size)
-        else:
-            self.closing = True
-            self.write('', buffered=False,
-                       send_size=self.chunk_size)
-        if self.closing:
-            self.handle_close()
+    def handle_close(self):
+        """Закрывает сокет, генератор, удаляет себя из мапа"""
+        super(HTTPRequestHandler, self).handle_close()
+        if hasattr(self, '_reader'):
+            self._reader.close()
 
 
 class TCPServer(async_handlers.BaseStreamHandler):

@@ -52,6 +52,7 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         self.content_length = 0
         self.chunked = False
         self.chunk_size = 2048
+        self.resource = False
 
     def send_headers(self, code):
         self.send_header('Server', self.version_string())
@@ -147,18 +148,15 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         return re.sub('%[0-9a-f]{2}', decoder, url, flags=re.IGNORECASE)
 
     def handle_read(self):
-        while True:
-            part = self.recv(1024)
-            if part:
-                self.rawrequest += part
-            else:
-                break
+        """Обработчик события чтения"""
+        self.rawrequest = self.read()
         if self.rawrequest:
             self.handle_request()
         else:
             self.handle_close()
 
     def handle_request(self):
+        """Парсинг и вызов обработчика запроса"""
         if not self.validate_start_line():
             return
         name = 'handle_' + self.command.lower()
@@ -167,6 +165,52 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
             return
         method = getattr(self, name)
         method()
+
+    def handle_write(self):
+        """Обработчик события записи"""
+        if self.resource:
+            if self.chunked:
+                # большой файл отдаем chunk-ми
+                # в буфере всегда остается какая-то часть от
+                # предыдущей итерации, чтобы оставаться writeable
+                buffering = False
+            else:
+                # все прочитанное из файла складываем в буфер и выходим из обработчика
+                # при следующем возникновении события на запись, отправляем
+                buffering = True
+            looping = True
+
+            while looping:
+                part = self.read_resourse()
+                _bytes = len(part)
+                if _bytes < self.chunk_size:
+                    # из файла ничего не прочитали
+                    # или же все, что меньше chunk_size
+                    # отправляем последний chunk и надо закрываться
+                    buffering = False
+                    looping = False
+                    self.closing = True
+
+                if self.chunked:
+                    # записываем длину блока
+                    chunk_len = hex(_bytes)
+                    chunk_len = chunk_len.lstrip('0x')
+                    self.write(chunk_len + '\r\n')
+                    looping = False
+                    part += '\r\n'
+
+                self.write(part, buffered=buffering,
+                           send_size=self.chunk_size)
+        else:
+            self.closing = True
+            self.write('', buffered=False,
+                       send_size=self.chunk_size)
+        if self.closing:
+            self.handle_close()
+
+    def read_resourse(self):
+        """Чтение из файла"""
+        raise NotImplementedError
 
     def handle_error(self):
         self.send_response(500)

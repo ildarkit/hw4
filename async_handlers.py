@@ -388,6 +388,7 @@ class StreamHandler(BaseStreamHandler):
     def __init__(self, sock=None, map=None):
         super(StreamHandler, self).__init__(sock, map)
         self.send_buffer = ''
+        self.recv_buffer = ''
         self.buf_bytes = 0
 
     def sendall(self, data):
@@ -414,3 +415,12 @@ class StreamHandler(BaseStreamHandler):
                 data = self.send_buffer[:send_size]
                 self.send_buffer = self.send_buffer[send_size:]
                 self.sendall(data)
+
+    def read(self):
+        while True:
+            part = self.recv(1024)
+            if part:
+                self.recv_buffer += part
+            else:
+                break
+        return self.recv_buffer
