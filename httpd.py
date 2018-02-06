@@ -45,13 +45,14 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
         code = OK
         try_index_file = False
         full_path = self.root_dir + self.url_decode(self.path.split('?', 1)[0])
-        full_path = os.path.normpath(full_path)
-        if os.path.isdir(full_path):
-            full_path = os.path.join(full_path, INDEX_FILE)
-            try_index_file = True
-        if os.path.isfile(full_path):
-            self.content = full_path
+        try:
             self.content_type = CONTENT_TYPES[os.path.splitext(full_path)[1].lower()]
+        except KeyError:
+            full_path = os.path.join(full_path, INDEX_FILE)
+            self.content_type = CONTENT_TYPES[os.path.splitext(full_path)[1].lower()]
+            try_index_file = True
+        if os.path.exists(full_path):
+            self.content = full_path
             self.resource = True
         elif try_index_file:
             code = FORBIDDEN
