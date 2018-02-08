@@ -5,6 +5,8 @@ import os
 import time
 import socket
 import select
+import logging
+import multiprocessing
 from errno import (EWOULDBLOCK, ECONNRESET, EINVAL, ENOTCONN,
                    ESHUTDOWN, EINTR, EBADF, ECONNABORTED, EPIPE, EAGAIN, errorcode)
 
@@ -67,6 +69,14 @@ def write(obj):
         obj.handle_error()
 
 
+def stopping(obj):
+    obj.handle_stop_event()
+
+
+def closing(obj):
+    obj.handle_close_event()
+
+
 def _exception(obj):
     try:
         obj.handle_expt_event()
@@ -78,6 +88,7 @@ def _exception(obj):
 
 def epoll_poller(timeout=0.0, map=None):
     """A poller which uses epoll(), supported on Linux 2.5.44 and newer."""
+    _stopping = False
     if map is None:
         map = socket_map
     pollster = select.epoll()
@@ -99,15 +110,27 @@ def epoll_poller(timeout=0.0, map=None):
             if err.args[0] != EINTR:
                 raise
             r = []
+        except KeyboardInterrupt:
+            _stopping = True
+
+        if _stopping:
+            for fd in map:
+                stopping(map[fd])
+
         for fd, flags in r:
             obj = map.get(fd)
             if obj is None:
                 continue
             readwrite(obj, flags)
 
+        if r == [] and len(map) == 1:
+            obj = map.values()[0]
+            closing(obj)
+
 
 def select_poller(timeout=0.0, map=None):
     """A poller which uses select(), available on most platforms."""
+    _stopping = False
     if map is None:
         map = socket_map
     if map:
@@ -131,6 +154,12 @@ def select_poller(timeout=0.0, map=None):
         except (OSError, select.error) as e:
             if e.args[0] != EINTR:
                 raise
+        except KeyboardInterrupt:
+            _stopping = True
+
+        if _stopping:
+            for fd in map:
+                stopping(map[fd])
 
         for fd in r:
             obj = map.get(fd)
@@ -149,6 +178,10 @@ def select_poller(timeout=0.0, map=None):
             if obj is None:
                 continue
             _exception(obj)
+
+        if r == w == e == [] and len(map) == 1:
+            obj = map.values()[0]
+            closing(obj)
 
 
 def loop(timeout=30.0, map=None, count=None):
@@ -177,6 +210,7 @@ class BaseStreamHandler(object):
     accepting = False
     connecting = False
     closing = False
+    refusing = False
     addr = None
     ignore_log_types = frozenset(['warning'])
 
@@ -281,14 +315,20 @@ class BaseStreamHandler(object):
         else:
             return conn, addr
 
+    def acceptable(self):
+        return self.accepting
+
     def send(self, data):
         result = 0
         try:
             result = self.socket.send(data)
         except socket.error as err:
             if err.args[0] in DISCONNECTED:
+                # сокет отсоединился - закрываем его
                 self.handle_close()
             elif err.args[0] == EWOULDBLOCK:
+                # отправить в неблокирующий сокет
+                # не удалось, нужно закрывать его
                 pass
             else:
                 raise
@@ -298,11 +338,13 @@ class BaseStreamHandler(object):
         try:
             return self.socket.recv(buffer_size)
         except socket.error as err:
-            # winsock sometimes raises ENOTCONN
             if err.args[0] in DISCONNECTED:
+                # сокет отсоединился - закрываем его
                 self.handle_close()
                 return ''
             elif err.args[0] == EWOULDBLOCK:
+                # из неблокирующего сокета прочитать не удалось
+                # возвращаем пустое значение - признак того, что все получено
                 return ''
             else:
                 raise
@@ -318,14 +360,23 @@ class BaseStreamHandler(object):
             if err.args[0] not in (ENOTCONN, EBADF):
                 raise
 
+    def set_refusing(self):
+        logging.info('Stopping {}'.format(
+            multiprocessing.current_process().name)
+        )
+        self.accepting = False
+        self.refusing = True
+
+    def isrefusing(self):
+        return self.refusing and not self.accepting
+
     def handle_read_event(self):
         if not self.connected and self.connecting:
             self.handle_connect_event()
         if self.accepting:
             self.handle_accept()
-        else:
+        elif not self.refusing:
             self.handle_read()
-
 
     def handle_write_event(self):
         if self.accepting:
@@ -360,6 +411,17 @@ class BaseStreamHandler(object):
             self.handle_close()
         else:
             self.handle_expt()
+
+    def handle_stop_event(self):
+        if self.acceptable():
+            self.set_refusing()
+
+    def handle_close_event(self):
+        if self.isrefusing():
+            logging.info('{} is stopped'.format(
+                multiprocessing.current_process().name)
+            )
+            self.handle_close()
 
     def handle_error(self):
         self.handle_close()

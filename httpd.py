@@ -103,7 +103,7 @@ class TCPServer(async_handlers.BaseStreamHandler):
         pair = self.accept()
         if pair is not None:
             sock, addr = pair
-            worker_name = multiprocessing.current_process().name
+            #worker_name = multiprocessing.current_process().name
             #logging.info('{}: Incoming connection from {}'.format(worker_name, addr))
             _ = self.handlerclass(sock, root_dir=self.root_dir)
 
@@ -117,7 +117,7 @@ if __name__ == '__main__':
     op.add_option("-p", "--port", action="store", type=int, default=8080)
     op.add_option("-H", "--host", action="store", default='localhost')
     op.add_option("-w", "--workers", action="store", type=int, default=5)
-    op.add_option("-r", "--root", action="store", default='/home/ildark/otus_python/http-test-suite')
+    op.add_option("-r", "--root", action="store", default='')
     op.add_option("-l", "--log", action="store", default=None)
     (opts, args) = op.parse_args()
     logging.basicConfig(filename=opts.log, level=logging.INFO,
@@ -125,6 +125,7 @@ if __name__ == '__main__':
 
     server = HTTPServer((opts.host, opts.port), HTTPRequestHandler, root_dir=opts.root)
     logging.info("Starting {} workers at {}".format(opts.workers, opts.port))
+    logging.info('Press Ctrl+C to stop')
     #multiprocessing.log_to_stderr(logging.INFO)
     for i in range(opts.workers):
         p = multiprocessing.Process(target=async_handlers.loop,
@@ -136,5 +137,5 @@ if __name__ == '__main__':
 
     for worker in workers:
         worker.join()
-    server.close()
+    logging.info('Server is stopped')
 

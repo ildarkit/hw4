@@ -216,8 +216,8 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
         self.send_response(500)
         super(BaseHTTPRequestHandler, self).handle_error()
 
-    # def handle_expt(self):
-       # self.log_error()
+    def handle_expt(self):
+       self.handle_error()
 
     def validate_start_line(self):
         self.command = None  # set in case of error on the first line
