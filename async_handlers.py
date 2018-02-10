@@ -361,6 +361,8 @@ class BaseStreamHandler(object):
                 raise
 
     def set_refusing(self):
+        # сервер останавливается, поэтому
+        # входящие соединения не принимаем
         logging.info('Stopping {}'.format(
             multiprocessing.current_process().name)
         )
@@ -414,6 +416,8 @@ class BaseStreamHandler(object):
 
     def handle_stop_event(self):
         if self.acceptable():
+            # случилось KeyboardInterrupt, поэтому
+            # останавливаем серверный сокет
             self.set_refusing()
 
     def handle_close_event(self):
