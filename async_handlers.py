@@ -89,6 +89,7 @@ def _exception(obj):
 def epoll_poller(timeout=0.0, map=None):
     """A poller which uses epoll(), supported on Linux 2.5.44 and newer."""
     _stopping = False
+    r = []
     if map is None:
         map = socket_map
     pollster = select.epoll()
@@ -109,7 +110,6 @@ def epoll_poller(timeout=0.0, map=None):
         except select.error, err:
             if err.args[0] != EINTR:
                 raise
-            r = []
         except KeyboardInterrupt:
             _stopping = True
 
@@ -287,7 +287,7 @@ class BaseStreamHandler(object):
             pass
 
     def readable(self):
-        return True
+        return not self.refusing
 
     def writable(self):
         return True
@@ -368,7 +368,7 @@ class BaseStreamHandler(object):
         self.refusing = True
 
     def isrefusing(self):
-        return self.refusing and not self.accepting
+        return self.refusing
 
     def handle_read_event(self):
         if not self.connected and self.connecting:
@@ -418,10 +418,10 @@ class BaseStreamHandler(object):
 
     def handle_close_event(self):
         if self.isrefusing():
+            self.handle_close()
             logging.info('{} is stopped'.format(
                 multiprocessing.current_process().name)
             )
-            self.handle_close()
 
     def handle_error(self):
         self.handle_close()

@@ -18,7 +18,8 @@ CONTENT_TYPES = {'.html': 'text/html',
                  '.jpg': 'image/jpeg',
                  '.png': 'image/png',
                  '.gif': 'image/gif',
-                 '.swf': 'application/x-shockwave-flash'}
+                 '.swf': 'application/x-shockwave-flash',
+                 '.ico': 'image/x-icon'}
 OK = 200
 NOT_FOUND = 404
 FORBIDDEN = 403
