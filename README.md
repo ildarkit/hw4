@@ -17,15 +17,26 @@
 
 ### Результаты нагрузочного тестирования:
 ```
+wrk -c100 -d30s -t5 http://localhost:8080/
+Running 30s test @ http://localhost:8080/
+  5 threads and 100 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    26.23ms   71.11ms   1.89s    99.36%
+    Req/Sec   730.74    329.27     2.58k    74.80%
+  109254 requests in 30.05s, 39.80MB read
+  Socket errors: connect 0, read 0, write 0, timeout 18
+  Non-2xx or 3xx responses: 109254
+Requests/sec:   3635.75
+Transfer/sec:      1.32MB
+
 wrk -c100 -d60s -t8 http://localhost:8080/
 Running 1m test @ http://localhost:8080/
   8 threads and 100 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency    32.36ms   32.02ms   1.05s    99.48%
-    Req/Sec   371.23    198.68     3.47k    89.51%
-  172610 requests in 1.00m, 62.88MB read
-  Socket errors: connect 0, read 0, write 0, timeout 37
-  Non-2xx or 3xx responses: 172610
-Requests/sec:   2872.92
-Transfer/sec:      1.05MB
+    Latency    34.32ms   45.23ms   1.92s    99.10%
+    Req/Sec   371.35    160.80     1.77k    79.28%
+  177337 requests in 1.00m, 64.60MB read
+  Non-2xx or 3xx responses: 177337
+Requests/sec:   2950.79
+Transfer/sec:      1.07MB
 ```
