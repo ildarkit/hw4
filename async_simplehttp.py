@@ -115,20 +115,7 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
 
     def date_time_string(self, timestamp=None):
         """Return the current date and time formatted for a message header."""
-        if timestamp is None:
-            timestamp = time.time()
-        year, month, day, hh, mm, ss, wd = time.gmtime(timestamp)[:-2]
-        s = "{}, {:02d} {:3s} {:4d} {:02d}:{:02d}:{:02d} GMT".format(
-                self.weekdayname[wd],
-                day, self.monthname[month], year,
-                hh, mm, ss)
-        return s
-
-    weekdayname = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
-    monthname = [None,
-                 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        return time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(timestamp))
 
     def log_error(self, format, *args, **kwargs):
         kwargs['log']("{} - {} {} {}\n".format(
