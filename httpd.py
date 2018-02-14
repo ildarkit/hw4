@@ -3,6 +3,7 @@
 
 import os
 import socket
+import urllib
 import logging
 import multiprocessing
 from optparse import OptionParser
@@ -44,7 +45,7 @@ class HTTPRequestHandler(async_simplehttp.BaseHTTPRequestHandler):
     def get_content(self):
         code = OK
         try_index_file = False
-        full_path = self.root_dir + self.url_decode(self.path.split('?', 1)[0])
+        full_path = self.root_dir + urllib.unquote(self.path.split('?', 1)[0])
         try:
             self.content_type = CONTENT_TYPES[os.path.splitext(full_path)[1].lower()]
         except KeyError:

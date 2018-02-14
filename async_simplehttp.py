@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import re
 import sys
 import time
 import logging
@@ -138,14 +137,6 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
             self.path,
             format.format(*args))
         )
-
-    @staticmethod
-    def url_decode(url):
-        def decoder(match):
-            code = match.group()
-            if code:
-                return chr(int(code[1:], 16))
-        return re.sub('%[0-9a-f]{2}', decoder, url, flags=re.IGNORECASE)
 
     def handle_read(self):
         """Обработчик события чтения"""
