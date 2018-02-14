@@ -76,12 +76,13 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
             self.write(self.content, buffered=False,
                        send_size=self.chunk_size)
 
-    def send_error(self, code, log=logging.error):
+    def send_error(self, code):
         try:
             short, long = self.responses[code]
         except KeyError:
             short, long = '???', '???'
-        self.log_error("- Status code: {:d} {}", code, short, log=log)
+        logging.error("{} - {} {} - Status code: {:d} {}",
+                      self.addr[0], self.command, self.path, code, short)
         if self.command != 'HEAD':
             self.content = DEFAULT_ERROR_MESSAGE.format(
                 code=code, message=short, explain=long
@@ -116,14 +117,6 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
     def date_time_string(self, timestamp=None):
         """Return the current date and time formatted for a message header."""
         return time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(timestamp))
-
-    def log_error(self, format, *args, **kwargs):
-        kwargs['log']("{} - {} {} {}\n".format(
-            self.addr[0],
-            self.command,
-            self.path,
-            format.format(*args))
-        )
 
     def handle_read(self):
         """Обработчик события чтения"""
