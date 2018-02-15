@@ -24,7 +24,7 @@ DEFAULT_ERROR_MESSAGE = """<html>
 DEFAULT_ERROR_CONTENT_TYPE = "text/html"
 
 
-class BaseHTTPRequestHandler(async_handlers.StreamHandler):
+class BaseHTTPRequestHandler(async_handlers.BaseStreamHandler):
 
     default_request_version = "HTTP/0.9"
     protocol_version = "HTTP/1.1"
@@ -81,8 +81,9 @@ class BaseHTTPRequestHandler(async_handlers.StreamHandler):
             short, long = self.responses[code]
         except KeyError:
             short, long = '???', '???'
-        logging.error("{} - {} {} - Status code: {:d} {}",
-                      self.addr[0], self.command, self.path, code, short)
+        logging.error("{} - {} {} - Status code: {:d} {}".format(
+            self.addr[0], self.command, self.path, code, short)
+        )
         if self.command != 'HEAD':
             self.content = DEFAULT_ERROR_MESSAGE.format(
                 code=code, message=short, explain=long

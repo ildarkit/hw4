@@ -205,16 +205,17 @@ def loop(timeout=30.0, map=None, count=None):
 
 class BaseStreamHandler(object):
 
-    debug = False
     connected = False
     accepting = False
     connecting = False
     closing = False
     refusing = False
     addr = None
-    ignore_log_types = frozenset(['warning'])
 
     def __init__(self, sock=None, map=None):
+        self.send_buffer = ''
+        self.recv_buffer = ''
+        self.buf_bytes = 0
         if map is None:
             self._map = socket_map
         else:
@@ -290,7 +291,7 @@ class BaseStreamHandler(object):
         return not self.refusing
 
     def writable(self):
-        return True
+        return (not self.connected) or len(self.send_buffer)
 
     def listen(self, num):
         self.accepting = True
@@ -348,6 +349,37 @@ class BaseStreamHandler(object):
                 return ''
             else:
                 raise
+
+    def sendall(self, data):
+        while data:
+            self.buf_bytes = self.send(data)
+            if self.buf_bytes:
+                data = data[self.buf_bytes:]
+            else:
+                data = ''
+        if self.closing:
+            self.send('')
+
+    def write(self, part='', buffered=True, send_size=2048):
+        if part:
+            self.send_buffer += part
+        if not buffered:
+            # в случае когда нужно отправлять chunk-ми,
+            # очищаем не весь буфер для того,
+            # чтобы оставаться writeable
+            if self.send_buffer:
+                data = self.send_buffer[:send_size]
+                self.send_buffer = self.send_buffer[send_size:]
+                self.sendall(data)
+
+    def read(self):
+        while True:
+            part = self.recv(1024)
+            if part:
+                self.recv_buffer += part
+            else:
+                break
+        return self.recv_buffer
 
     def close(self):
         self.connected = False
@@ -447,46 +479,3 @@ class BaseStreamHandler(object):
 
     def handle_close(self):
         self.close()
-
-
-class StreamHandler(BaseStreamHandler):
-
-    def __init__(self, sock=None, map=None):
-        super(StreamHandler, self).__init__(sock, map)
-        self.send_buffer = ''
-        self.recv_buffer = ''
-        self.buf_bytes = 0
-
-    def sendall(self, data):
-        while data:
-            self.buf_bytes = self.send(data)
-            if self.buf_bytes:
-                data = data[self.buf_bytes:]
-            else:
-                data = ''
-        if self.closing:
-            self.send('')
-
-    def writable(self):
-        return (not self.connected) or len(self.send_buffer)
-
-    def write(self, part='', buffered=True, send_size=2048):
-        if part:
-            self.send_buffer += part
-        if not buffered:
-            # в случае когда нужно отправлять chunk-ми,
-            # очищаем не весь буфер для того,
-            # чтобы оставаться writeable
-            if self.send_buffer:
-                data = self.send_buffer[:send_size]
-                self.send_buffer = self.send_buffer[send_size:]
-                self.sendall(data)
-
-    def read(self):
-        while True:
-            part = self.recv(1024)
-            if part:
-                self.recv_buffer += part
-            else:
-                break
-        return self.recv_buffer
